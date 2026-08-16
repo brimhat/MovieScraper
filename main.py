@@ -256,6 +256,9 @@ def fetch_from_vt_by_date(start_date, end_date):
                     movie_date_exceeds_end_date = True
                     break
 
+                if datetime.strptime(movie_date, "%b %d, %Y") < start_date:
+                    continue
+
                 for movie_time in movie_time_clusters[movie_date_index].find_elements(By.CLASS_NAME, "group"):
                     movie = MovieDescription(
                         movie_title,
