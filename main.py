@@ -42,13 +42,13 @@ class MovieDescription:
 
     def get_standardized_date(self):
         if self.source == "AC":
-            return datetime.strptime(self.date + "; " + self.time, "%a %b %d, %Y; %I:%M %p")
+            return datetime.strptime(self.date + "; " + self.time[0:-2] + " " + self.time[-2:], "%a %b %d, %Y; %I:%M %p")
         elif self.source == "VD":
-            return datetime.strptime(self.date + "; " + self.time, "%b %d, %Y; %I:%M %p")
+            return datetime.strptime(self.date + "; " + self.time[0:-2] + " " + self.time[-2:], "%b %d, %Y; %I:%M %p")
         elif self.source == "AM":
-            return datetime.strptime(self.date + "; " + self.time, "%b %d, %Y; %I:%M %p")
+            return datetime.strptime(self.date + "; " + self.time[0:-2] + " " + self.time[-2:], "%b %d, %Y; %I:%M %p")
         elif self.source == "VT":
-            return datetime.strptime(self.date + "; " + self.time, "%b %d, %Y; %I:%M %p")
+            return datetime.strptime(self.date + "; " + self.time[0:-2] + " " + self.time[-2:], "%b %d, %Y; %I:%M %p")
         else:
             raise ValueError("Unrecognized movie source: " + self.source)
 
@@ -188,7 +188,12 @@ def fetch_from_am_by_date(start_date, end_date):
                 driver.quit()
                 return movies
 
-            movie_time = movie_detail_arr[1]
+            movie_time_dirty = movie_detail_arr[1]
+            if len(movie_time_dirty.split(":")) == 1:
+                movie_time = movie_time_dirty[0:-2] + ":00 " + movie_time_dirty[-2:]
+            else:
+                movie_time = movie_time_dirty
+
             movie_notes = ["In DCP"]
             if len(movie_detail_arr) > 2:
                 movie_notes = ["In " + movie_detail_arr[2]]
@@ -279,10 +284,10 @@ def fetch_from_vt_by_date(start_date, end_date):
 
 start_date = datetime.today()
 end_date = start_date + timedelta(days=5)
-#movies = fetch_from_ac_by_date(start_date, end_date)
-#movies = fetch_from_vd_by_date(start_date, end_date)
-#movies = fetch_from_am_by_date(start_date, end_date)
-movies = fetch_from_vt_by_date(start_date, end_date)
+movies = fetch_from_ac_by_date(start_date, end_date)
+movies += fetch_from_vd_by_date(start_date, end_date)
+movies += fetch_from_am_by_date(start_date, end_date)
+movies += fetch_from_vt_by_date(start_date, end_date)
 
 movies.sort()
 
