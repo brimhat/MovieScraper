@@ -7,7 +7,7 @@ from selenium.webdriver import ActionChains
 from selenium.webdriver.common.by import By
 
 class MovieDescription:
-    def __init__(self, title, date, time, notes, link, location, source):
+    def __init__(self, title, date, time, notes, link, location, source, release_year, director):
         self.title = title
         self.date = date
         self.time = time
@@ -15,6 +15,8 @@ class MovieDescription:
         self.link = link
         self.location = location
         self.source = source
+        self.release_year = release_year
+        self.director = director
 
     def __lt__(self, other):
         return self.get_standardized_date() < other.get_standardized_date()
@@ -29,16 +31,10 @@ class MovieDescription:
         return self.time
 
     def to_list(self):
-        return [self.title, self.date, self.time, self.location, self.notes, self.link]
+        return [self.title, self.director, self.release_year, self.date, self.time, self.location, self.notes, self.link]
 
-    def get_time_as_float(self):
-        timeStr = self.time.split()
-        [hoursStr, minutesStr] = timeStr[0].split(':')
-        hours = float(hoursStr)
-        minutes = float(minutesStr)
-        meridiem = 0
-        if timeStr[1].upper() == 'PM': meridiem = 12.0
-        return hours + (minutes / 60.0) + meridiem
+    def to_str(self):
+        return f"{self.title} ({self.release_year}) - {self.director} | {self.date}, {self.time}, {self.location}, {self.notes}, {self.link}"
 
     def get_standardized_date(self):
         if self.source == "AC":
@@ -98,7 +94,17 @@ def fetch_from_ac_by_date(start_date, end_date):
             movie_link = element.find_element(By.CLASS_NAME, "seriesEventCardModule__target").get_attribute("href")
             movie_loc = element.find_element(By.CLASS_NAME, "seriesEventCardModule__body").text.split(" | ")[0]
 
-            movie = MovieDescription(movie_title, movie_date, movie_time, notes=[], link=movie_link, location=movie_loc, source="AC")
+            movie = MovieDescription(
+                movie_title,
+                movie_date,
+                movie_time,
+                notes=[],
+                link=movie_link,
+                location=movie_loc,
+                source="AC",
+                release_year = "N/A",
+                director="N/A"
+            )
 
             if movie.get_standardized_date() > end_date:
                 driver.quit()
@@ -132,6 +138,21 @@ def fetch_from_vd_by_date(start_date, end_date):
         format_note_child = listing.find_element(By.CLASS_NAME, "show-specs").find_element(By.XPATH, ".//*[contains(text(), 'Format:')]")
         format_note = "In " + format_note_child.find_element(By.XPATH, "..").text[8:].split()[0]
 
+        try:
+            movie_release_year = (listing.find_element(By.CLASS_NAME, "show-specs")
+                                         .find_element(By.XPATH, ".//*[contains(text(), 'Release Year:')]")
+                                         .find_element(By.XPATH, "..").text.split()[-1])
+        except NoSuchElementException:
+            movie_release_year = "N/A"
+
+        try:
+            movie_director = (listing.find_element(By.CLASS_NAME, "show-specs")
+                                     .find_element(By.XPATH, ".//*[contains(text(), 'Director:')]")
+                                     .find_element(By.XPATH, "..").text[10:])
+        except NoSuchElementException:
+            movie_director = "N/A"
+
+
         movie_time_index = 0
         for movie_date_dirty in movie_dates:
             movie_date = movie_date_dirty.get_attribute("textContent").strip()[4:].strip() + f", {datetime.today().year}"
@@ -160,7 +181,9 @@ def fetch_from_vd_by_date(start_date, end_date):
                         movie_notes,
                         movie_link,
                         location="Vidiots",
-                        source="VD"
+                        source="VD",
+                        release_year=movie_release_year,
+                        director=movie_director,
                     )
                     movies.append(movie)
                     movie_time_index += 1
@@ -210,7 +233,17 @@ def fetch_from_am_by_date(start_date, end_date):
                 movie_notes.append("With " + movie_detail_str[1])
 
             movie_loc = listing.find_element(By.CLASS_NAME, "styles__VenueLocation-sc-d3de435b-14").text
-            movie = MovieDescription(movie_title, movie_date, movie_time, movie_notes, movie_link, movie_loc, source="AM")
+            movie = MovieDescription(
+                movie_title,
+                movie_date,
+                movie_time,
+                movie_notes,
+                movie_link,
+                movie_loc,
+                source="AM",
+                release_year="N/A",
+                director="N/A"
+            )
             movies.append(movie)
 
     driver.quit()
@@ -225,9 +258,11 @@ def fetch_from_vt_by_date(start_date, end_date):
     movie_listings = driver.find_elements(By.CLASS_NAME, "shows__grid--row")
     for listing in movie_listings:
         movie_title = listing.find_element(By.TAG_NAME, "h3").text
-        movie_notes = [ "In " + listing.find_element(By.CLASS_NAME, "content").find_element(By.TAG_NAME, "p").text.split(" | ")[-1].split()[0] ]
+        [movie_release_year, _, format_note] = listing.find_element(By.CLASS_NAME, "content").find_element(By.TAG_NAME, "p").text.split(" | ")
+        movie_notes = [ "In " + format_note.split()[0] ]
         movie_loc = "Vista Theater"
         movie_link = "https://www.vistatheaterhollywood.com/"
+        movie_director = (listing.find_element(By.CLASS_NAME, "content").find_elements(By.TAG_NAME, "p"))[3].text
 
         try:
             movie_showings_slides = listing.find_elements(By.CLASS_NAME, "swiper-slide")
@@ -272,7 +307,9 @@ def fetch_from_vt_by_date(start_date, end_date):
                         movie_notes,
                         movie_link,
                         movie_loc,
-                        source="VT"
+                        source="VT",
+                        release_year=movie_release_year,
+                        director=movie_director
                     )
                     movies.append(movie)
                 movie_date_index += 1
@@ -293,4 +330,4 @@ movies.sort()
 
 
 for movie in movies:
-    print(movie.to_list())
+    print(movie.to_str())
