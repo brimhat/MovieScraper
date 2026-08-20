@@ -34,7 +34,14 @@ class MovieDescription:
         return [self.title, self.director, self.release_year, self.date, self.time, self.location, self.notes, self.link]
 
     def to_str(self):
-        return f"{self.title} ({self.release_year}) - {self.director} | {self.date}, {self.time}, {self.location}, {self.notes}, {self.link}"
+        if self.release_year == 'N/A' and self.director == 'N/A':
+            return f"\"{self.title}\" | {self.date}, {self.time}, {self.location}, {self.notes}, {self.link}"
+        elif self.release_year == 'N/A':
+            return f"{self.director}'s \"{self.title}\" | {self.date}, {self.time}, {self.location}, {self.notes}, {self.link}"
+        elif self.director == 'N/A':
+            return f"\"{self.title}\" ({self.release_year}) | {self.date}, {self.time}, {self.location}, {self.notes}, {self.link}"
+        else:
+            return f"{self.director}'s \"{self.title}\" ({self.release_year}) | {self.date}, {self.time}, {self.location}, {self.notes}, {self.link}"
 
     def get_standardized_date(self):
         if self.source == "AC":
@@ -74,10 +81,9 @@ class MovieDescription:
         if start_idx > 0: self.notes.append(str[0:start_idx-1])
         if end_idx < len(str): self.notes.append(str[end_idx+1:].capitalize())
 
-def fetch_from_ac_by_date(start_date, end_date):
+def fetch_from_ac_by_date(start_date, end_date, driver):
     movies = []
     url = f"https://www.americancinematheque.com/now-showing/?start={start_date.strftime("%Y.%m.%d")}&end={end_date.strftime("%Y.%m.%d")}&view_type=list"
-    driver = webdriver.Chrome()
     driver.get(url)
     time.sleep(1)
     pages = driver.find_elements(By.CLASS_NAME, "ais-Pagination-item")
@@ -107,20 +113,17 @@ def fetch_from_ac_by_date(start_date, end_date):
             )
 
             if movie.get_standardized_date() > end_date:
-                driver.quit()
                 return movies
 
             movie.set_title_and_notes_from_ac(movie.title)
             movies.append(movie)
 
         if pages.index(page) == len(pages) - 3: break
-    driver.quit()
     return movies
 
-def fetch_from_vd_by_date(start_date, end_date):
+def fetch_from_vd_by_date(start_date, end_date, driver):
     movies = []
     url = f"https://vidiotsfoundation.org/coming-soon/"
-    driver = webdriver.Chrome()
     driver.get(url)
     time.sleep(1)
     movie_listings = driver.find_elements(By.CLASS_NAME, "show-details")
@@ -187,13 +190,11 @@ def fetch_from_vd_by_date(start_date, end_date):
                     )
                     movies.append(movie)
                     movie_time_index += 1
-    driver.quit()
     return movies
 
-def fetch_from_am_by_date(start_date, end_date):
+def fetch_from_am_by_date(start_date, end_date, driver):
     movies = []
     url = f"https://www.academymuseum.org/calendar?programTypes=16i3uOYQwism7sMDhIQr2O&start={start_date.strftime("%Y-%m-%d")}&end={end_date.strftime("%Y-%m-%d")}"
-    driver = webdriver.Chrome()
     driver.get(url)
     time.sleep(1)
     #driver.find_element(By.ID, "CybotCookiebotDialogBodyLevelButtonLevelOptinAllowallSelection").click()
@@ -208,7 +209,6 @@ def fetch_from_am_by_date(start_date, end_date):
             movie_detail_arr = listing.find_element(By.CLASS_NAME, "styles__Showtime-sc-d3de435b-13").text.split(" | ")
             movie_date = movie_detail_arr[0]
             if datetime.strptime(movie_date, "%b %d, %Y") > end_date:
-                driver.quit()
                 return movies
 
             movie_time_dirty = movie_detail_arr[1]
@@ -246,13 +246,11 @@ def fetch_from_am_by_date(start_date, end_date):
             )
             movies.append(movie)
 
-    driver.quit()
     return movies
 
-def fetch_from_vt_by_date(start_date, end_date):
+def fetch_from_vt_by_date(start_date, end_date, driver):
     movies = []
     url = f"https://www.vistatheaterhollywood.com/"
-    driver = webdriver.Chrome()
     driver.get(url)
     time.sleep(1)
     movie_listings = driver.find_elements(By.CLASS_NAME, "shows__grid--row")
@@ -315,19 +313,62 @@ def fetch_from_vt_by_date(start_date, end_date):
                 movie_date_index += 1
             if movie_date_exceeds_end_date:
                 break
-    driver.quit()
     return movies
 
+def fetch_director_and_release_year(movie, driver):
+    if movie.source == 'AC':
+        driver.get(movie.link)
+        time.sleep(1)
+        info_bar = driver.find_element(By.CLASS_NAME, "eventDetailBar__list")
+        try:
+            movie.release_year = info_bar.find_element(By.XPATH, ".//*[contains(text(), 'RELEASED IN:')]").text.split()[-1]
+        except NoSuchElementException:
+            movie.release_year = 'N/A'
 
-start_date = datetime.today()
-end_date = start_date + timedelta(days=5)
-movies = fetch_from_ac_by_date(start_date, end_date)
-movies += fetch_from_vd_by_date(start_date, end_date)
-movies += fetch_from_am_by_date(start_date, end_date)
-movies += fetch_from_vt_by_date(start_date, end_date)
+        try:
+            movie.director = info_bar.find_element(By.XPATH, ".//*[contains(text(), 'DIRECTED BY:')]").text[13:]
+        except NoSuchElementException:
+            movie.director = 'N/A'
+    elif movie.source == 'AM':
+        driver.get(movie.link)
+        time.sleep(1)
+        info_list = driver.find_element(By.CLASS_NAME, "styles__MetadataWrapper-sc-7fe3db37-4")
+        try:
+            release_year = info_list.find_element(By.XPATH, f".//*[contains(text(), '{movie.notes[0][3:]}')]").text.split()[0]
+            try:
+                int(release_year)
+            except ValueError:
+                release_year = 'N/A'
+            else:
+                movie.release_year = release_year
+        except NoSuchElementException:
+            movie.release_year = 'N/A'
 
-movies.sort()
+        try:
+            director = info_list.find_element(By.XPATH, ".//*[contains(text(), 'DIRECTED')]").text
+            director_idx = director.index(':')
+            movie.director = director[director_idx+1:].strip()
+        except NoSuchElementException:
+            movie.director = 'N/A'
 
 
-for movie in movies:
-    print(movie.to_str())
+def main():
+    start_date = datetime.today()
+    end_date = start_date + timedelta(days=5)
+    driver = webdriver.Chrome()
+    movies = fetch_from_ac_by_date(start_date, end_date, driver)
+    movies += fetch_from_vd_by_date(start_date, end_date, driver)
+    movies += fetch_from_am_by_date(start_date, end_date, driver)
+    movies += fetch_from_vt_by_date(start_date, end_date, driver)
+
+    for movie in movies:
+        fetch_director_and_release_year(movie, driver)
+
+    driver.quit()
+
+    movies.sort()
+
+    for movie in movies:
+        print(movie.to_str())
+
+main()
