@@ -35,11 +35,11 @@ class MovieDescription:
 
     def to_str(self):
         if self.release_year == 'N/A' and self.director == 'N/A':
-            return f"\"{self.title}\" | {self.date}, {self.time}, {self.location}, {self.notes}, {self.link}"
+            return f"[UNCREDITED]'s \"{self.title}\" (N/A) | {self.date}, {self.time}, {self.location}, {self.notes}, {self.link}"
         elif self.release_year == 'N/A':
-            return f"{self.director}'s \"{self.title}\" | {self.date}, {self.time}, {self.location}, {self.notes}, {self.link}"
+            return f"{self.director}'s \"{self.title}\" (N/A) | {self.date}, {self.time}, {self.location}, {self.notes}, {self.link}"
         elif self.director == 'N/A':
-            return f"\"{self.title}\" ({self.release_year}) | {self.date}, {self.time}, {self.location}, {self.notes}, {self.link}"
+            return f"[UNCREDITED]'s \"{self.title}\" ({self.release_year}) | {self.date}, {self.time}, {self.location}, {self.notes}, {self.link}"
         else:
             return f"{self.director}'s \"{self.title}\" ({self.release_year}) | {self.date}, {self.time}, {self.location}, {self.notes}, {self.link}"
 
@@ -277,15 +277,18 @@ def fetch_from_vt_by_date(start_date, end_date, driver):
             movie_date_index = 0
             movie_dates = showings_slide.find_elements(By.CLASS_NAME, "text__size-2")
             movie_time_clusters = showings_slide.find_elements(By.CLASS_NAME, "times")
+            showings_slide_p = showings_slide.find_elements(By.TAG_NAME, "p")
             try:
-                new_movie_date_month = showings_slide.find_element(By.CLASS_NAME, "month").get_attribute("textContent")[0:3]
+                new_movie_date_month_dirty = showings_slide.find_element(By.CLASS_NAME, "month")
+                new_movie_date_month = new_movie_date_month_dirty.get_attribute("textContent")[0:3]
             except NoSuchElementException:
+                new_movie_date_month_dirty = None
                 new_movie_date_month = movie_date_month
 
             for movie_date_dirty in movie_dates:
                 movie_date = movie_date_month + f" {movie_date_dirty.get_attribute("textContent")[0:-2]}, {datetime.today().year}"
 
-                if movie_date_month != new_movie_date_month and datetime.strptime(movie_date, "%b %d, %Y") < movies[-1].get_standardized_date():
+                if movie_date_month != new_movie_date_month and movie_dates.index(movie_date_dirty) >= 3*showings_slide_p.index(new_movie_date_month_dirty):
                     movie_date_month = new_movie_date_month
                     movie_date = movie_date_month + f" {movie_date_dirty.get_attribute("textContent")[0:-2]}, {datetime.today().year}"
                     print("Switching months...")
@@ -338,7 +341,7 @@ def fetch_director_and_release_year(movie, driver):
             try:
                 int(release_year)
             except ValueError:
-                release_year = 'N/A'
+                movie.release_year = 'N/A'
             else:
                 movie.release_year = release_year
         except NoSuchElementException:
@@ -349,7 +352,13 @@ def fetch_director_and_release_year(movie, driver):
             director_idx = director.index(':')
             movie.director = director[director_idx+1:].strip()
         except NoSuchElementException:
-            movie.director = 'N/A'
+            try:
+                director = info_list.find_element(By.XPATH, ".//*[contains(text(), 'DIRECTOR')]").text
+                director_idx = director.index(':')
+                movie.director = director[director_idx + 1:].strip()
+            except NoSuchElementException:
+                movie.director = 'N/A'
+
 
 
 def main():
